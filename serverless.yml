@@ -1,0 +1,115 @@
+service: taller-products
+
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: us-east-1
+  stage: ${opt:stage, 'develop'}
+  profile: serverless-user
+  apiGateway:
+    restApiId:
+      Fn::ImportValue: MainRestApiId-${self:provider.stage}
+    restApiRootResourceId:
+      Fn::ImportValue: MainRestApiRootResourceId-${self:provider.stage}
+  environment:
+    PRODUCTS_TABLE: ${self:custom.tableName}
+    STAGE: ${self:provider.stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tableName}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tableName}/index/*
+
+custom:
+  tableName: products-table-${self:provider.stage}
+
+functions:
+  createProduct:
+    handler: src/handlers/createProduct.createProduct
+    events:
+      - http:
+          path: products
+          method: post
+          cors: true
+
+  getProduct:
+    handler: src/handlers/getProduct.getProduct
+    events:
+      - http:
+          path: products/{id}
+          method: get
+          cors: true
+
+  updateProduct:
+    handler: src/handlers/updateProduct.updateProduct
+    events:
+      - http:
+          path: products/{id}
+          method: put
+          cors: true
+
+  deleteProduct:
+    handler: src/handlers/deleteProduct.deleteProduct
+    events:
+      - http:
+          path: products/{id}
+          method: delete
+          cors: true
+
+  listAllProducts:
+    handler: src/handlers/listAllProducts.listAllProducts
+    events:
+      - http:
+          path: products
+          method: get
+          cors: true
+
+  listProductsBySeller:
+    handler: src/handlers/listProductsBySeller.listProductsBySeller
+    events:
+      - http:
+          path: products/seller/{sellerId}
+          method: get
+          cors: true
+
+  updateStock:
+    handler: src/handlers/updateStock.updateStock
+    events:
+      - http:
+          path: products/{id}/stock
+          method: patch
+          cors: true
+
+resources:
+  Resources:
+    ProductsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tableName}
+        AttributeDefinitions:
+          - AttributeName: productId
+            AttributeType: S
+          - AttributeName: sellerId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: productId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: seller-index
+            KeySchema:
+              - AttributeName: sellerId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
